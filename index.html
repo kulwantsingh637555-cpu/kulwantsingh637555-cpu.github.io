@@ -1,0 +1,405 @@
+
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vegetable Inventory Management</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+        <div class="logo">
+            🥬 <span>VeggieStock</span>
+        </div>
+
+        <nav>
+            <button class="nav-btn active" onclick="showSection('dashboard')">
+                🏠 Dashboard
+            </button>
+
+            <button class="nav-btn" onclick="showSection('inventory')">
+                📦 Inventory
+            </button>
+
+            <button class="nav-btn" onclick="showSection('invoice')">
+                🧾 Invoice
+            </button>
+        </nav>
+
+    </aside>
+
+
+    <!-- Main -->
+    <main class="main">
+
+        <!-- Header -->
+        <header class="topbar">
+
+            <div>
+                <h1>Vegetable Inventory</h1>
+                <p>Manage your vegetable stock easily</p>
+            </div>
+
+            <div class="date-box">
+                📅 <span id="todayDate"></span>
+            </div>
+
+        </header>
+
+
+        <!-- ================= DASHBOARD ================= -->
+
+        <section id="dashboard" class="section active-section">
+
+            <h2>Dashboard</h2>
+
+            <div class="stats">
+
+                <div class="stat-card">
+                    <div class="stat-icon">🥬</div>
+                    <div>
+                        <p>Total Items</p>
+                        <h3 id="totalItems">10</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📦</div>
+                    <div>
+                        <p>Total Stock</p>
+                        <h3><span id="totalStock">20</span> KG</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div>
+                        <p>Stock Value</p>
+                        <h3>₹<span id="stockValue">20</span></h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🏷️</div>
+                    <div>
+                        <p>Categories</p>
+                        <h3 id="totalCategories">10</h3>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <div class="quick-box">
+
+                <h2>Quick Add Item</h2>
+
+                <button class="primary-btn" onclick="openAddModal()">
+                    ➕ Add Vegetable
+                </button>
+
+                <button class="secondary-btn" onclick="showSection('inventory')">
+                    📦 View Inventory
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= INVENTORY ================= -->
+
+        <section id="inventory" class="section">
+
+            <div class="section-title">
+
+                <div>
+                    <h2>Inventory</h2>
+                    <p>Manage vegetables and stock</p>
+                </div>
+
+                <button class="primary-btn" onclick="openAddModal()">
+                    ➕ Add Item
+                </button>
+
+            </div>
+
+
+            <!-- Search and Filter -->
+
+            <div class="filters">
+
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="🔍 Search vegetable..."
+                    oninput="renderTable()"
+                >
+
+                <select id="categoryFilter" onchange="renderTable()">
+
+                    <option value="">All Categories</option>
+                    <option value="Vegetable">Vegetable</option>
+                    <option value="Root">Root Vegetable</option>
+                    <option value="Leafy">Crops / Grains</option>
+                    <option value="Fruit">Fruit</option>
+                    <option value="Other">Other</option>
+
+                </select>
+
+            </div>
+
+
+            <!-- Table -->
+
+            <div class="table-container">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>#</th>
+                            <th>Date</th>
+                            <th>Item</th>
+                            <th>Category</th>
+                            <th>Stock In</th>
+                            <th>Stock Out</th>
+                            <th>Current Stock</th>
+                            <th>Buy Price</th>
+                            <th>Sell Price</th>
+                            <th>Value</th>
+                            <th>Action</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="inventoryTable">
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <p class="invoice-help">🧾 <strong>Invoice:</strong> Click the Invoice button in any item row to add that item directly to the invoice.</p>
+
+        </section>
+
+
+        <!-- ================= INVOICE ================= -->
+
+        <section id="invoice" class="section">
+
+            <div class="section-title">
+
+                <div>
+                    <h2>Invoice</h2>
+                    <p>Create vegetable sales invoice</p>
+                </div>
+
+                <button class="primary-btn" onclick="printInvoice()">
+                    🖨️ Print Invoice
+                </button>
+
+            </div>
+
+
+            <div class="invoice">
+
+                <div class="invoice-header">
+
+                    <div>
+                        <h1>🥬 VeggieStock</h1>
+                        <p>Vegetable Store</p>
+                    </div>
+
+                    <div>
+                        <strong>INVOICE</strong>
+                        <p id="invoiceDate"></p>
+                    </div>
+
+                </div>
+
+
+                <div class="customer">
+
+                    <input
+                        type="text"
+                        id="customerName"
+                        placeholder="Customer Name"
+                    >
+
+                    <input
+                        type="text"
+                        id="customerPhone"
+                        placeholder="Customer Phone"
+                    >
+
+                </div>
+
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Item</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Total</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="invoiceTable">
+                    </tbody>
+
+                </table>
+
+
+                <div class="invoice-total">
+
+                    <h2>
+                        Grand Total:
+                        ₹<span id="invoiceTotal">0</span>
+                    </h2>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- ================= ADD / EDIT MODAL ================= -->
+
+<div id="itemModal" class="modal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2 id="modalTitle">Add Vegetable</h2>
+
+            <button class="close-btn" onclick="closeModal()">
+                ✕
+            </button>
+
+        </div>
+
+
+        <input type="hidden" id="editIndex">
+
+
+        <label>Vegetable Name</label>
+
+        <input
+            type="text"
+            id="itemName"
+            placeholder="Example: Potato"
+        >
+
+
+        <label>Category</label>
+
+        <select id="itemCategory">
+
+            <option value="Vegetable">Vegetable</option>
+            <option value="Root">Root vegateble</option>
+            <option value="Leafy">crop/ grains</option>
+            <option value="Fruit">Fruit</option>
+            <option value="Other">Other</option>
+
+        </select>
+
+
+        <label>Date</label>
+
+        <input type="date" id="itemDate">
+
+
+        <div class="two-inputs">
+
+            <div>
+
+                <label>Stock In (KG)</label>
+
+                <input
+                    type="number"
+                    id="stockIn"
+                    min="0"
+                    placeholder="10"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>Stock Out (KG)</label>
+
+                <input
+                    type="number"
+                    id="stockOut"
+                    min="0"
+                    placeholder="2"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="two-inputs">
+
+            <div>
+
+                <label>Buy Price / KG</label>
+
+                <input
+                    type="number"
+                    id="buyPrice"
+                    min="0"
+                    placeholder="30"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>Sell Price / KG</label>
+
+                <input
+                    type="number"
+                    id="sellPrice"
+                    min="0"
+                    placeholder="40"
+                >
+
+            </div>
+
+        </div>
+
+
+        <button class="primary-btn full-btn" onclick="saveItem()">
+            💾 Save Item
+        </button>
+
+    </div>
+
+</div>
+
+
+
+    <script src="script.js"></script>
+</body>
+</html>
