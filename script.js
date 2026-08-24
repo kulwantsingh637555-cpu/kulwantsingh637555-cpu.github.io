@@ -1,3 +1,23 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDM_2MYad1LPpEBPEQhkhZKsdy20WpQoww",
+  authDomain: "smart-hotel-veggis-store.firebaseapp.com",
+  projectId: "smart-hotel-veggis-store",
+  storageBucket: "smart-hotel-veggis-store.firebasestorage.app",
+  messagingSenderId: "313226803394",
+  appId: "1:313226803394:web:64915703ffb27a673c635b",
+  measurementId: "G-CMXXCF84QN"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const inventoryCollection = collection(db, "vegetableItems");
+const invoiceCollection = collection(db, "invoiceItems");
+
 /* =====================================================
 iou
    VEGETABLE INVENTORY MANAGEMENT SYSTEM
@@ -17,18 +37,60 @@ let invoiceItems = JSON.parse(
 ) || [];
 
 
+/* ================= FIREBASE SYNC ================= */
+
+async function loadInventoryFromFirebase() {
+    try {
+        const snapshot = await getDocs(inventoryCollection);
+        const remote = [];
+        snapshot.forEach(d => remote.push({ ...d.data(), firebaseId: d.id }));
+
+        if (remote.length > 0) {
+            items = remote;
+            saveToLocalStorage();
+        } else if (items.length > 0) {
+            // First-time migration: upload old local inventory once.
+            const oldItems = items.map(x => ({...x}));
+            for (const item of oldItems) {
+                delete item.firebaseId;
+                const d = await addDoc(inventoryCollection, item);
+                item.firebaseId = d.id;
+            }
+            items = oldItems;
+            saveToLocalStorage();
+        }
+    } catch (error) {
+        console.error("Firebase inventory load error:", error);
+    }
+}
+
+async function loadInvoicesFromFirebase() {
+    try {
+        const snapshot = await getDocs(invoiceCollection);
+        const remote = [];
+        snapshot.forEach(d => remote.push({ ...d.data(), firebaseId: d.id }));
+        if (remote.length > 0) {
+            invoiceItems = remote;
+            saveInvoiceLocalOnly();
+        }
+    } catch (error) {
+        console.error("Firebase invoice load error:", error);
+    }
+}
+
+function saveInvoiceLocalOnly() {
+    localStorage.setItem("invoiceItems", JSON.stringify(invoiceItems));
+}
+
 /* ================= PAGE LOAD ================= */
 
-document.addEventListener("DOMContentLoaded", function () {
-
+document.addEventListener("DOMContentLoaded", async function () {
     setTodayDate();
-
+    await loadInventoryFromFirebase();
+    await loadInvoicesFromFirebase();
     renderTable();
-
     updateDashboard();
-
     renderInvoice();
-
 });
 
 
@@ -145,7 +207,7 @@ function closeModal() {
 
 /* ================= SAVE ITEM ================= */
 
-function saveItem() {
+async function saveItem() {
 
     const name =
         document.getElementById("itemName").value.trim();
@@ -235,39 +297,39 @@ function saveItem() {
     };
 
 
-    /* ================= EDIT ================= */
+    /* ================= FIREBASE SAVE ================= */
 
-    if (editIndex !== "") {
+    try {
+        if (editIndex !== "") {
+            const index = Number(editIndex);
+            const oldItem = items[index];
 
-        items[Number(editIndex)] = item;
+            if (oldItem?.firebaseId) {
+                await updateDoc(doc(db, "vegetableItems", oldItem.firebaseId), item);
+                item.firebaseId = oldItem.firebaseId;
+            } else {
+                const newDoc = await addDoc(inventoryCollection, item);
+                item.firebaseId = newDoc.id;
+            }
 
-        alert("Item updated successfully!");
+            items[index] = item;
+            alert("Item updated successfully and synced to Firebase!");
+        } else {
+            const newDoc = await addDoc(inventoryCollection, item);
+            item.firebaseId = newDoc.id;
+            items.push(item);
+            alert("Item added successfully and synced to Firebase!");
+        }
 
+        saveToLocalStorage();
+        renderTable();
+        updateDashboard();
+        renderInvoice();
+        closeModal();
+    } catch (error) {
+        console.error("Firebase save error:", error);
+        alert("Firebase में save नहीं हुआ। Firestore Rules और internet connection check करें।");
     }
-
-
-    /* ================= ADD ================= */
-
-    else {
-
-        items.push(item);
-
-        alert("Item added successfully!");
-
-    }
-
-
-    /* ================= UPDATE ================= */
-
-    saveToLocalStorage();
-
-    renderTable();
-
-    updateDashboard();
-
-    renderInvoice();
-
-    closeModal();
 
 }
 
@@ -518,36 +580,27 @@ function editItem(index) {
 
 /* ================= DELETE ITEM ================= */
 
-function deleteItem(index) {
-
+async function deleteItem(index) {
     const item = items[index];
+    if (!item) return;
 
-    if (!item) {
-        return;
+    if (!confirm(`Delete ${item.name}?`)) return;
+
+    try {
+        if (item.firebaseId) {
+            await deleteDoc(doc(db, "vegetableItems", item.firebaseId));
+        }
+
+        items.splice(index, 1);
+        saveToLocalStorage();
+        renderTable();
+        updateDashboard();
+        renderInvoice();
+        alert("Item deleted successfully.");
+    } catch (error) {
+        console.error("Firebase delete error:", error);
+        alert("Item delete नहीं हुआ। Firebase connection/rules check करें।");
     }
-
-
-    const confirmDelete = confirm(
-        `Delete ${item.name}?`
-    );
-
-
-    if (!confirmDelete) {
-        return;
-    }
-
-
-    items.splice(index, 1);
-
-
-    saveToLocalStorage();
-
-    renderTable();
-
-    updateDashboard();
-
-    renderInvoice();
-
 }
 
 
@@ -618,7 +671,7 @@ function updateDashboard() {
 
 /* ================= ADD TO INVOICE ================= */
 
-function addToInvoice(index) {
+async function addToInvoice(index) {
 
     const item = items[index];
 
@@ -656,7 +709,7 @@ function addToInvoice(index) {
     }
 
 
-    saveInvoice();
+    await saveInvoice();
 
     renderInvoice();
 
@@ -771,7 +824,7 @@ function renderInvoice() {
 
 /* ================= CHANGE INVOICE QUANTITY ================= */
 
-function changeInvoiceQty(index, quantity) {
+async function changeInvoiceQty(index, quantity) {
 
     quantity = Number(quantity);
 
@@ -791,7 +844,7 @@ function changeInvoiceQty(index, quantity) {
     }
 
 
-    saveInvoice();
+    await saveInvoice();
 
     renderInvoice();
 
@@ -800,13 +853,30 @@ function changeInvoiceQty(index, quantity) {
 
 /* ================= SAVE INVOICE ================= */
 
-function saveInvoice() {
+async function saveInvoice() {
+    localStorage.setItem("invoiceItems", JSON.stringify(invoiceItems));
 
-    localStorage.setItem(
-        "invoiceItems",
-        JSON.stringify(invoiceItems)
-    );
+    try {
+        const snapshot = await getDocs(invoiceCollection);
 
+        for (const d of snapshot.docs) {
+            await deleteDoc(doc(db, "invoiceItems", d.id));
+        }
+
+        for (const invoiceItem of invoiceItems) {
+            const data = {
+                name: invoiceItem.name,
+                quantity: Number(invoiceItem.quantity),
+                price: Number(invoiceItem.price)
+            };
+            const d = await addDoc(invoiceCollection, data);
+            invoiceItem.firebaseId = d.id;
+        }
+
+        localStorage.setItem("invoiceItems", JSON.stringify(invoiceItems));
+    } catch (error) {
+        console.error("Firebase invoice save error:", error);
+    }
 }
 
 
