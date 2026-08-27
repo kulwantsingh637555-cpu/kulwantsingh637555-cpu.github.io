@@ -7,11 +7,10 @@
 <body>
 <div id="loginScreen" class="login-screen">
   <div class="login-card"><div class="brand">🥬 VeggieStock</div><h1>Store Login</h1><p>Inventory & Sales Management</p>
-    <form id="loginForm"><label>Username</label><input id="loginUser" required autocomplete="username" placeholder="admin"><label>Password</label><input id="loginPass" type="password" required autocomplete="current-password" placeholder="admin123"><button class="primary-btn full" type="submit">🔐 Login</button><div id="loginError" class="error"></div></form>
-    <small>Demo login: <b>admin</b> / <b>admin123</b></small>
+    <form id="loginForm"><label>Username</label><input id="loginUser" required autocomplete="username" placeholder="Enter username"><label>Password</label><input id="loginPass" type="password" required autocomplete="current-password" placeholder="Enter password"><button class="primary-btn full" type="submit">🔐 Login</button><div id="loginError" class="error"></div></form>
   </div>
 </div>
-<div id="app" class="app hidden">
+<div id="app" class="app hidden" style="display:none!important">
 <aside class="sidebar"><div class="logo">🥬 <span>VeggieStock</span></div><nav>
 <button class="nav-btn active" data-section="dashboard">🏠 Dashboard</button><button class="nav-btn" data-section="inventory">📦 Inventory</button><button class="nav-btn" data-section="invoice">🧾 Invoice</button><button class="nav-btn" data-section="customers">👥 Customers</button><button class="nav-btn" data-section="reports">📊 Sales & Profit</button>
 </nav><button class="logout-btn" id="logoutBtn">🚪 Logout</button></aside>
@@ -24,4 +23,4 @@
 </main></div>
 <div id="itemModal" class="modal"><div class="modal-content"><div class="modal-header"><h2 id="modalTitle">Add Vegetable</h2><button class="close-btn" onclick="closeModal()">✕</button></div><input type="hidden" id="editIndex"><label>Item Name</label><input id="itemName" placeholder="Potato"><label>Category</label><select id="itemCategory"><option>Vegetable</option><option>Root</option><option>Leafy</option><option>Fruit</option><option>Other</option></select><label>Date</label><input type="date" id="itemDate"><div class="two-inputs"><div><label>Stock In (KG)</label><input type="number" id="stockIn" min="0" step="0.01"></div><div><label>Stock Out (KG)</label><input type="number" id="stockOut" min="0" step="0.01" value="0"></div></div><div class="two-inputs"><div><label>Buy Price / KG</label><input type="number" id="buyPrice" min="0" step="0.01"></div><div><label>Sell Price / KG</label><input type="number" id="sellPrice" min="0" step="0.01"></div></div><button class="primary-btn full" onclick="saveItem()">💾 Save Item</button></div></div>
 <div id="stockModal" class="modal"><div class="modal-content"><div class="modal-header"><h2>Sell / Stock Out</h2><button class="close-btn" onclick="closeStockModal()">✕</button></div><input type="hidden" id="stockOutIndex"><p id="stockOutItemName"></p><label>Quantity Sold / Stock Out (KG)</label><input type="number" id="stockOutQty" min="0.01" step="0.01"><div class="two-inputs"><div><label>Customer Name</label><input id="stockCustomerName" placeholder="Walk-in Customer"></div><div><label>Phone</label><input id="stockCustomerPhone" placeholder="Mobile number"></div></div><label>Address</label><input id="stockCustomerAddress" placeholder="Optional address"><label>Payment</label><select id="stockPayment"><option>Cash</option><option>UPI</option><option>Card</option><option>Credit</option></select><button class="primary-btn full" onclick="saveStockOut()">💰 Record Sale & Reduce Stock</button></div></div>
-<script src="script.js"></script></body></html>
+<script src="script.js?v=3"></script></body></html>
