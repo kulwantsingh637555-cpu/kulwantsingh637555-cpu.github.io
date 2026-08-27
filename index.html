@@ -11,6 +11,7 @@
 
     <!-- Sidebar -->
     <aside class="sidebar">
+        
 
         <div class="logo">
             🥬 <span>VeggieStock</span>
@@ -44,6 +45,7 @@
                 <p>Manage your vegetable stock easily</p>
             </div>
 
+            <div id="firebaseStatus" class="firebase-status">🟡 Connecting...</div>
             <div class="date-box">
                 📅 <span id="todayDate"></span>
             </div>
@@ -63,7 +65,7 @@
                     <div class="stat-icon">🥬</div>
                     <div>
                         <p>Total Items</p>
-                        <h3 id="totalItems">0</h3>
+                        <h3 id="totalItems">10</h3>
                     </div>
                 </div>
 
@@ -71,7 +73,7 @@
                     <div class="stat-icon">📦</div>
                     <div>
                         <p>Total Stock</p>
-                        <h3><span id="totalStock">0</span> KG</h3>
+                        <h3><span id="totalStock">20</span> KG</h3>
                     </div>
                 </div>
 
@@ -79,7 +81,7 @@
                     <div class="stat-icon">💰</div>
                     <div>
                         <p>Stock Value</p>
-                        <h3>₹<span id="stockValue">0</span></h3>
+                        <h3>₹<span id="stockValue">20</span></h3>
                     </div>
                 </div>
 
@@ -87,7 +89,7 @@
                     <div class="stat-icon">🏷️</div>
                     <div>
                         <p>Categories</p>
-                        <h3 id="totalCategories">0</h3>
+                        <h3 id="totalCategories">10</h3>
                     </div>
                 </div>
 
@@ -400,6 +402,9 @@
 
 
 
-    <script type="module" src="script.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="firebase.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
