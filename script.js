@@ -1,44 +1,503 @@
-const $=id=>document.getElementById(id);const money=n=>Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
-let items=JSON.parse(localStorage.getItem('vegetableItems')||'[]');let invoiceItems=JSON.parse(localStorage.getItem('invoiceItems')||'[]');let sales=JSON.parse(localStorage.getItem('veggieSales')||'[]');let customers=JSON.parse(localStorage.getItem('veggieCustomers')||'[]');let currentUser=sessionStorage.getItem('veggieLoggedUser');
-function saveAll(){localStorage.setItem('vegetableItems',JSON.stringify(items));localStorage.setItem('invoiceItems',JSON.stringify(invoiceItems));localStorage.setItem('veggieSales',JSON.stringify(sales));localStorage.setItem('veggieCustomers',JSON.stringify(customers))}
-function stock(i){return Math.max(0,(Number(i.stockIn)||0)-(Number(i.stockOut)||0))}function stockValue(i){return stock(i)*(Number(i.buyPrice)||0)}
-function today(){return new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'})}
-function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active-section'));$(id).classList.add('active-section');document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.section===id));if(id==='invoice')renderInvoice();if(id==='customers')renderCustomers();if(id==='reports')renderReports()}
-document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showSection(b.dataset.section)));
-function init(){migrateOldStockOutToSales();const login=$('loginScreen'),app=$('app');if(!currentUser){login.classList.remove('hidden');login.style.display='grid';app.classList.add('hidden');app.style.display='none'}else{login.classList.add('hidden');login.style.display='none';app.classList.remove('hidden');app.style.display='flex';$('loggedUser').textContent=currentUser}$('todayDate').textContent=today();$('invoiceDate').textContent='Date: '+today();newInvoiceNo();renderTable();updateDashboard();renderInvoice();renderCustomers();renderReports();}
-$('loginForm').addEventListener('submit',e=>{e.preventDefault();if($('loginUser').value.trim()==='admin'&&$('loginPass').value==='admin123'){currentUser='admin';sessionStorage.setItem('veggieLoggedUser','admin');$('loginError').textContent='';init()}else $('loginError').textContent='Wrong username or password.'});$('logoutBtn').onclick=()=>{sessionStorage.removeItem('veggieLoggedUser');currentUser=null;init()};
-function newInvoiceNo(){let d=new Date(),key=d.toISOString().slice(0,10).replaceAll('-','');let count=Number(localStorage.getItem('veggieInvoiceCount_'+key)||0)+1;$('invoiceNo').textContent='INV-'+key+'-'+String(count).padStart(3,'0')}
-function openAddModal(){ $('modalTitle').textContent='Add Vegetable';$('editIndex').value='';$('itemName').value='';$('itemCategory').value='Vegetable';$('itemDate').value=new Date().toISOString().slice(0,10);$('stockIn').value='';$('stockOut').value='0';$('buyPrice').value='';$('sellPrice').value='';$('itemModal').classList.add('show') }function closeModal(){$('itemModal').classList.remove('show')}
-function saveItem(){let name=$('itemName').value.trim(),date=$('itemDate').value,si=+($('stockIn').value||0),so=+($('stockOut').value||0),bp=+($('buyPrice').value||0),sp=+($('sellPrice').value||0),idx=$('editIndex').value;if(!name||!date)return alert('Item name and date are required.');if(si<0||so<0||bp<0||sp<0)return alert('Values cannot be negative.');if(si-so<0)return alert('Stock Out cannot be greater than Stock In.');let obj={name,category:$('itemCategory').value,date,stockIn:si,stockOut:so,buyPrice:bp,sellPrice:sp};if(idx==='')items.push(obj);else items[+idx]=obj;saveAll();closeModal();renderTable();updateDashboard();populateInvoiceSelect();alert(idx===''?'Item added successfully!':'Item updated successfully!')}
-function renderTable(){let t=$('inventoryTable'),search=($('searchInput')?.value||'').toLowerCase(),cat=$('categoryFilter')?.value||'';let list=items.map((x,i)=>({...x,_i:i})).filter(x=>x.name.toLowerCase().includes(search)&&(cat===''||x.category===cat));t.innerHTML=list.length?list.map(x=>{let s=stock(x),v=stockValue(x);return `<tr><td>${x._i+1}</td><td>${new Date(x.date).toLocaleDateString('en-IN')}</td><td><b>${esc(x.name)}</b></td><td>${esc(x.category)}</td><td>${money(x.stockIn)} KG</td><td>${money(x.stockOut)} KG</td><td><b>${money(s)} KG</b></td><td>₹${money(x.buyPrice)}</td><td>₹${money(x.sellPrice)}</td><td>₹${money(v)}</td><td><button class="action-btn edit" onclick="editItem(${x._i})">✏️</button><button class="action-btn stock" onclick="openStockOut(${x._i})">📦</button><button class="action-btn invoice-btn" onclick="quickInvoice(${x._i})">🧾</button><button class="action-btn delete" onclick="deleteItem(${x._i})">🗑️</button></td></tr>`}).join(''):'<tr><td colspan="11">No items found.</td></tr>'}
-function editItem(i){let x=items[i];$('modalTitle').textContent='Edit Vegetable';$('editIndex').value=i;$('itemName').value=x.name;$('itemCategory').value=x.category;$('itemDate').value=x.date;$('stockIn').value=x.stockIn;$('stockOut').value=x.stockOut;$('buyPrice').value=x.buyPrice;$('sellPrice').value=x.sellPrice;$('itemModal').classList.add('show')}
-function deleteItem(i){if(confirm('Delete '+items[i].name+'?')){items.splice(i,1);saveAll();renderTable();updateDashboard();populateInvoiceSelect()}}
-function openStockOut(i){$('stockOutIndex').value=i;$('stockOutItemName').innerHTML='<b>'+esc(items[i].name)+'</b> — Current stock: '+money(stock(items[i]))+' KG';$('stockOutQty').value='';$('stockCustomerName').value='';$('stockCustomerPhone').value='';$('stockCustomerAddress').value='';$('stockPayment').value='Cash';$('stockModal').classList.add('show')}function closeStockModal(){$('stockModal').classList.remove('show')}
-function makeInvoiceNumber(){let d=new Date(),key=d.toISOString().slice(0,10).replaceAll('-',''),num=Number(localStorage.getItem('veggieInvoiceCount_'+key)||0)+1;localStorage.setItem('veggieInvoiceCount_'+key,num);return 'INV-'+key+'-'+String(num).padStart(3,'0')}
-function upsertCustomer(customer,saleDate,total){
-let name=customer.name||'Walk-in Customer',phone=customer.phone||'',address=customer.address||'';
-let ci=-1;if(phone)ci=customers.findIndex(c=>c.phone===phone);else ci=customers.findIndex(c=>!c.phone&&c.name===name);
-if(ci>=0){customers[ci].total=Number(customers[ci].total||0)+total;customers[ci].lastPurchase=saleDate;if(name!=='Walk-in Customer'||!customers[ci].name)customers[ci].name=name;if(address)customers[ci].address=address}else customers.push({name,phone,address,total,lastPurchase:saleDate});
+/* =====================================================
+   SMART VEGETABLE STORE
+   Firestore = shared inventory source of truth
+   LocalStorage = offline cache / first-time migration only
+   ===================================================== */
+
+import { db, auth } from "./firebase.js";
+import {
+    collection, doc, setDoc, deleteDoc, getDocs, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+let items = JSON.parse(localStorage.getItem("vegetableItems") || "[]");
+let invoiceItems = JSON.parse(localStorage.getItem("invoiceItems") || "[]");
+let unsubscribeInventory = null;
+let cloudReady = false;
+let toastTimer = null;
+
+const INVENTORY_COLLECTION = "vegetableItems";
+
+/* ================= PAGE LOAD ================= */
+
+document.addEventListener("DOMContentLoaded", async () => {
+    setTodayDate();
+    renderTable();
+    updateDashboard();
+    renderInvoice();
+    await connectCloudInventory();
+});
+
+/* ================= CLOUD SYNC ================= */
+
+async function connectCloudInventory() {
+    setSyncStatus("⏳ Connecting to cloud...", false);
+
+    try {
+        await signInAnonymously(auth);
+
+        const snap = await getDocs(collection(db, INVENTORY_COLLECTION));
+
+        // First device: migrate existing local inventory only if cloud is empty.
+        if (snap.empty && items.length > 0) {
+            for (const item of items) {
+                const id = item.id || makeId();
+                item.id = id;
+                await setDoc(doc(db, INVENTORY_COLLECTION, id), sanitizeItem(item));
+            }
+        }
+
+        // If cloud already has data, cloud is authoritative.
+        if (!snap.empty) {
+            items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            cacheItems();
+            renderTable();
+            updateDashboard();
+        }
+
+        subscribeToInventory();
+        cloudReady = true;
+        setSyncStatus("☁️ Cloud sync ON", true);
+    } catch (error) {
+        console.error("Firebase connection error:", error);
+        cloudReady = false;
+        setSyncStatus("⚠️ Cloud sync unavailable", false);
+        showToast("Firebase connect नहीं हुआ। पहले Anonymous Authentication और Firestore rules check करें।");
+    }
 }
-function saveStockOut(){let i=+$('stockOutIndex').value,q=+($('stockOutQty').value||0),s=stock(items[i]);if(!items[i]||q<=0||q>s)return alert('Enter a valid quantity up to current stock.');
-let row=items[i],total=q*(Number(row.sellPrice)||0),cost=q*(Number(row.buyPrice)||0),profit=total-cost,inv=makeInvoiceNumber(),d=new Date();
-row.stockOut=Number(row.stockOut||0)+q;
-let customer={name:($('stockCustomerName').value.trim()||'Walk-in Customer'),phone:$('stockCustomerPhone').value.trim(),address:$('stockCustomerAddress').value.trim()};
-let sale={invoice:inv,date:d.toISOString(),customer:customer.name,phone:customer.phone,address:customer.address,payment:$('stockPayment').value,items:[{index:i,name:row.name,quantity:q,price:Number(row.sellPrice)||0,buyPrice:Number(row.buyPrice)||0}],total,cost,profit};
-sales.unshift(sale);upsertCustomer(customer,sale.date,total);saveAll();closeStockModal();renderTable();updateDashboard();renderReports();renderCustomers();alert('Sale recorded. '+money(total)+' sales and '+money(profit)+' profit added. Current stock: '+money(stock(row))+' KG. Invoice '+inv+' saved.')}
-function migrateOldStockOutToSales(){if(localStorage.getItem('veggieStockOutMigrated')==='1'||sales.length||!items.some(x=>Number(x.stockOut)>0))return;
-let d=new Date(),changed=false;items.forEach((row,i)=>{let q=Number(row.stockOut)||0;if(q<=0)return;let total=q*(Number(row.sellPrice)||0),cost=q*(Number(row.buyPrice)||0);sales.push({invoice:'STOCKOUT-'+String(i+1).padStart(3,'0'),date:d.toISOString(),customer:'Walk-in Customer',phone:'',address:'',payment:'Cash',items:[{index:i,name:row.name,quantity:q,price:Number(row.sellPrice)||0,buyPrice:Number(row.buyPrice)||0}],total,cost,profit:total-cost});changed=true});
-if(changed){sales.sort((a,b)=>new Date(b.date)-new Date(a.date));saveAll()}localStorage.setItem('veggieStockOutMigrated','1')}
-function updateDashboard(){let ts=items.reduce((a,x)=>a+stock(x),0),sv=items.reduce((a,x)=>a+stockValue(x),0),cats=new Set(items.map(x=>x.category));let salesTotal=sales.reduce((a,x)=>a+x.total,0),profit=sales.reduce((a,x)=>a+x.profit,0);$('totalItems').textContent=items.length;$('totalStock').textContent=money(ts);$('stockValue').textContent=money(sv);$('totalCategories').textContent=cats.size;$('totalSales').textContent=money(salesTotal);$('totalProfit').textContent=money(profit);let low=items.filter(x=>stock(x)<=5);$('lowStockList').innerHTML=low.length?low.map(x=>`<div>⚠️ ${esc(x.name)} — ${money(stock(x))} KG left</div>`).join(''):'<div>✅ No low-stock items.</div>'}
-function populateInvoiceSelect(){let s=$('invoiceItemSelect');s.innerHTML='<option value="">Select item</option>'+items.map((x,i)=>`<option value="${i}">${esc(x.name)} — ${money(stock(x))} KG — ₹${money(x.sellPrice)}/KG</option>`).join('')}
-function quickInvoice(i){showSection('invoice');$('invoiceItemSelect').value=i;addSelectedToInvoice()}
-function addSelectedToInvoice(){let i=$('invoiceItemSelect').value,q=+($('invoiceQty').value||0);if(i===''||q<=0)return alert('Select an item and quantity.');let x=items[+i],s=stock(x);if(q>s)return alert('Only '+money(s)+' KG available for '+x.name+'.');let ex=invoiceItems.find(a=>a.index===+i);if(ex){if(ex.quantity+q>s)return alert('Quantity exceeds current stock.');ex.quantity+=q}else invoiceItems.push({index:+i,name:x.name,quantity:q,price:+x.sellPrice,buyPrice:+x.buyPrice});saveAll();renderInvoice()}
-function renderInvoice(){populateInvoiceSelect();let t=$('invoiceTable'),total=0,profit=0;t.innerHTML=invoiceItems.length?invoiceItems.map((x,i)=>{let row=items[x.index];if(!row)return '';let line=x.quantity*x.price,p=x.quantity*(x.price-x.buyPrice);total+=line;profit+=p;return `<tr><td>${esc(x.name)}</td><td><input style="width:85px" type="number" min="0.01" step="0.01" value="${x.quantity}" onchange="changeInvoiceQty(${i},this.value)"></td><td>₹${money(x.price)}</td><td>₹${money(line)}</td><td>₹${money(p)}</td><td><button class="action-btn delete" onclick="removeInvoiceItem(${i})">✕</button></td></tr>`}).join(''):'<tr><td colspan="6">Invoice is empty. Add items above.</td></tr>'; $('invoiceTotal').textContent=money(total);$('invoiceProfit').textContent=money(profit);$('invoiceItemCount').textContent=invoiceItems.reduce((a,x)=>a+x.quantity,0);$('invoiceDate').textContent='Date: '+today()}
-function changeInvoiceQty(i,val){let q=+val,row=items[invoiceItems[i].index];if(q<=0)return removeInvoiceItem(i);if(q>stock(row))return alert('Quantity exceeds available stock.');invoiceItems[i].quantity=q;saveAll();renderInvoice()}function removeInvoiceItem(i){invoiceItems.splice(i,1);saveAll();renderInvoice()}function clearInvoice(){if(invoiceItems.length&&!confirm('Clear current invoice?'))return;invoiceItems=[];saveAll();renderInvoice()}
-function completeSale(){if(!invoiceItems.length)return alert('Add items to invoice first.');let total=0,cost=0;for(let x of invoiceItems){let row=items[x.index],s=stock(row);if(!row||x.quantity>s)return alert('Stock changed. Please check '+(row?.name||x.name)+'.');total+=x.quantity*x.price;cost+=x.quantity*x.buyPrice}let profit=total-cost;let d=new Date(),inv=makeInvoiceNumber();invoiceItems.forEach(x=>{items[x.index].stockOut=Number(items[x.index].stockOut||0)+Number(x.quantity)});let customer={name:($('customerName').value.trim()||'Walk-in Customer'),phone:$('customerPhone').value.trim(),address:$('customerAddress').value.trim()};let sale={invoice:inv,date:d.toISOString(),customer:customer.name,phone:customer.phone,address:customer.address,payment:$('paymentMethod').value,items:invoiceItems.map(x=>({...x})),total,cost,profit};sales.unshift(sale);upsertCustomer(customer,sale.date,total);saveAll();renderTable();updateDashboard();renderReports();renderCustomers();alert('Sale completed. Stock reduced automatically. Invoice '+inv+' saved.');invoiceItems=[];$('customerName').value='';$('customerPhone').value='';$('customerAddress').value='';newInvoiceNo();renderInvoice()}
-function printInvoice(){if(!invoiceItems.length)return alert('Add items before printing.');window.print()}
-function renderCustomers(){$('customerTable').innerHTML=customers.length?customers.map((c,i)=>`<tr><td>${i+1}</td><td>${esc(c.name)}</td><td>${esc(c.phone||'-')}</td><td>${esc(c.address||'-')}</td><td>${new Date(c.lastPurchase).toLocaleDateString('en-IN')}</td><td>₹${money(c.total)}</td></tr>`).join(''):'<tr><td colspan="6">No customers yet.</td></tr>'}
-function renderReports(){let rs=sales.reduce((a,x)=>a+x.total,0),rc=sales.reduce((a,x)=>a+x.cost,0),rp=sales.reduce((a,x)=>a+x.profit,0);$('reportSales').textContent=money(rs);$('reportCost').textContent=money(rc);$('reportProfit').textContent=money(rp);$('reportInvoices').textContent=sales.length;$('salesTable').innerHTML=sales.length?sales.map(s=>`<tr><td>${esc(s.invoice)}</td><td>${new Date(s.date).toLocaleDateString('en-IN')}</td><td>${esc(s.customer)}</td><td>${s.items.reduce((a,x)=>a+x.quantity,0)}</td><td>₹${money(s.total)}</td><td>₹${money(s.cost)}</td><td>₹${money(s.profit)}</td><td>${esc(s.payment)}</td></tr>`).join(''):'<tr><td colspan="8">No completed sales yet.</td></tr>'}
-function exportReport(){if(!sales.length)return alert('No sales to export.');let rows=[['Invoice','Date','Customer','Phone','Sales','Cost','Profit','Payment'],...sales.map(s=>[s.invoice,new Date(s.date).toLocaleString('en-IN'),s.customer,s.phone,s.total,s.cost,s.profit,s.payment])];let csv=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='VeggieStock_Sales_Report.csv';a.click();URL.revokeObjectURL(a.href)}
-function esc(v){return String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[m]))}
-init();
+
+function subscribeToInventory() {
+    if (unsubscribeInventory) unsubscribeInventory();
+
+    unsubscribeInventory = onSnapshot(
+        collection(db, INVENTORY_COLLECTION),
+        snapshot => {
+            items = snapshot.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
+
+            cacheItems();
+            renderTable();
+            updateDashboard();
+            renderInvoice();
+
+            setSyncStatus("☁️ Cloud sync ON", true);
+        },
+        error => {
+            console.error("Inventory listener error:", error);
+            setSyncStatus("⚠️ Sync error", false);
+        }
+    );
+}
+
+async function saveItemToCloud(item) {
+    if (!auth.currentUser) {
+        throw new Error("Cloud login not ready");
+    }
+
+    const id = item.id || makeId();
+    const clean = sanitizeItem({ ...item, id });
+
+    await setDoc(doc(db, INVENTORY_COLLECTION, id), clean);
+    return id;
+}
+
+async function deleteItemFromCloud(id) {
+    await deleteDoc(doc(db, INVENTORY_COLLECTION, id));
+}
+
+function sanitizeItem(item) {
+    return {
+        name: String(item.name || "").trim(),
+        category: String(item.category || "Vegetable"),
+        date: String(item.date || ""),
+        stockIn: Number(item.stockIn) || 0,
+        stockOut: Number(item.stockOut) || 0,
+        buyPrice: Number(item.buyPrice) || 0,
+        sellPrice: Number(item.sellPrice) || 0,
+        updatedAt: Date.now()
+    };
+}
+
+/* ================= DATE ================= */
+
+function setTodayDate() {
+    const today = new Date();
+    const formattedDate = today.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+    });
+
+    const todayDate = document.getElementById("todayDate");
+    if (todayDate) todayDate.innerText = formattedDate;
+
+    const invoiceDate = document.getElementById("invoiceDate");
+    if (invoiceDate) invoiceDate.innerText = "Date: " + formattedDate;
+}
+
+/* ================= SECTION ================= */
+
+function showSection(sectionName) {
+    document.querySelectorAll(".section").forEach(section => {
+        section.classList.remove("active-section");
+    });
+
+    const selectedSection = document.getElementById(sectionName);
+    if (selectedSection) selectedSection.classList.add("active-section");
+
+    document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.classList.remove("active");
+    });
+
+    const navButtons = document.querySelectorAll(".nav-btn");
+    const map = { dashboard: 0, inventory: 1, invoice: 2 };
+
+    if (navButtons[map[sectionName]]) {
+        navButtons[map[sectionName]].classList.add("active");
+    }
+
+    if (sectionName === "inventory") renderTable();
+    if (sectionName === "invoice") renderInvoice();
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ================= MODAL ================= */
+
+function openAddModal() {
+    document.getElementById("modalTitle").innerText = "Add Vegetable";
+    document.getElementById("editIndex").value = "";
+    document.getElementById("itemName").value = "";
+    document.getElementById("itemCategory").value = "Vegetable";
+    document.getElementById("itemDate").value = new Date().toISOString().split("T")[0];
+    document.getElementById("stockIn").value = "";
+    document.getElementById("stockOut").value = "";
+    document.getElementById("buyPrice").value = "";
+    document.getElementById("sellPrice").value = "";
+    document.getElementById("itemModal").classList.add("show");
+}
+
+function closeModal() {
+    document.getElementById("itemModal").classList.remove("show");
+}
+
+/* ================= SAVE ITEM ================= */
+
+async function saveItem() {
+    const name = document.getElementById("itemName").value.trim();
+    const category = document.getElementById("itemCategory").value;
+    const date = document.getElementById("itemDate").value;
+    const stockIn = Number(document.getElementById("stockIn").value) || 0;
+    const stockOut = Number(document.getElementById("stockOut").value) || 0;
+    const buyPrice = Number(document.getElementById("buyPrice").value) || 0;
+    const sellPrice = Number(document.getElementById("sellPrice").value) || 0;
+    const editIndex = document.getElementById("editIndex").value;
+
+    if (!name) return alert("Please enter vegetable name!");
+    if (!date) return alert("Please select date!");
+    if (stockIn < 0 || stockOut < 0) return alert("Stock cannot be negative!");
+    if (buyPrice < 0 || sellPrice < 0) return alert("Price cannot be negative!");
+
+    // Prevent selling more than available stock.
+    if (stockOut > stockIn) {
+        return alert("Stock Out, Stock In से ज्यादा नहीं हो सकता!");
+    }
+
+    const oldItem = editIndex !== "" ? items[Number(editIndex)] : null;
+
+    const item = {
+        id: oldItem?.id || makeId(),
+        name,
+        category,
+        date,
+        stockIn,
+        stockOut,
+        buyPrice,
+        sellPrice
+    };
+
+    try {
+        if (cloudReady && auth.currentUser) {
+            await saveItemToCloud(item);
+            showToast(oldItem ? "Item updated और cloud में save हो गया।" : "Item cloud में save हो गया।");
+        } else {
+            items[editIndex !== "" ? Number(editIndex) : items.length] = item;
+            cacheItems();
+            renderTable();
+            updateDashboard();
+            showToast("Offline: item इस device पर save हुआ।");
+        }
+
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Item save नहीं हुआ। Firebase/Firestore Rules check करें।");
+    }
+}
+
+/* ================= LOCAL CACHE ================= */
+
+function cacheItems() {
+    localStorage.setItem("vegetableItems", JSON.stringify(items));
+}
+
+/* ================= CURRENT STOCK ================= */
+
+function getCurrentStock(item) {
+    return Math.max(0, Number(item.stockIn) - Number(item.stockOut));
+}
+
+function getStockValue(item) {
+    return getCurrentStock(item) * Number(item.buyPrice);
+}
+
+/* ================= RENDER TABLE ================= */
+
+function renderTable() {
+    const table = document.getElementById("inventoryTable");
+    if (!table) return;
+
+    const search = document.getElementById("searchInput")?.value.toLowerCase() || "";
+    const category = document.getElementById("categoryFilter")?.value || "";
+
+    const filteredItems = items.filter(item => {
+        const matchName = String(item.name || "").toLowerCase().includes(search);
+        const matchCategory = category === "" || item.category === category;
+        return matchName && matchCategory;
+    });
+
+    table.innerHTML = "";
+
+    if (filteredItems.length === 0) {
+        table.innerHTML = `<tr><td colspan="11">No items found</td></tr>`;
+        return;
+    }
+
+    filteredItems.forEach((item, filteredIndex) => {
+        const originalIndex = items.indexOf(item);
+        const currentStock = getCurrentStock(item);
+        const value = getStockValue(item);
+
+        table.innerHTML += `
+            <tr>
+                <td>${originalIndex + 1}</td>
+                <td>${formatDate(item.date)}</td>
+                <td><strong>${escapeHTML(item.name)}</strong></td>
+                <td>${escapeHTML(item.category)}</td>
+                <td>${Number(item.stockIn) || 0} KG</td>
+                <td>${Number(item.stockOut) || 0} KG</td>
+                <td><strong>${currentStock} KG</strong></td>
+                <td>₹${Number(item.buyPrice) || 0}</td>
+                <td>₹${Number(item.sellPrice) || 0}</td>
+                <td>₹${value}</td>
+                <td>
+                    <button class="edit-btn" onclick="editItem(${originalIndex})">✏️</button>
+                    <button class="delete-btn" onclick="deleteItem(${originalIndex})">🗑️</button>
+                    <button class="invoice-btn" onclick="addToInvoice(${originalIndex})">🧾 Invoice</button>
+                </td>
+            </tr>`;
+    });
+}
+
+/* ================= EDIT ITEM ================= */
+
+function editItem(index) {
+    const item = items[index];
+    if (!item) return;
+
+    document.getElementById("modalTitle").innerText = "Edit Vegetable";
+    document.getElementById("editIndex").value = index;
+    document.getElementById("itemName").value = item.name || "";
+    document.getElementById("itemCategory").value = item.category || "Vegetable";
+    document.getElementById("itemDate").value = item.date || "";
+    document.getElementById("stockIn").value = item.stockIn ?? 0;
+    document.getElementById("stockOut").value = item.stockOut ?? 0;
+    document.getElementById("buyPrice").value = item.buyPrice ?? 0;
+    document.getElementById("sellPrice").value = item.sellPrice ?? 0;
+    document.getElementById("itemModal").classList.add("show");
+}
+
+/* ================= DELETE ITEM ================= */
+
+async function deleteItem(index) {
+    const item = items[index];
+    if (!item) return;
+
+    if (!confirm(`Delete ${item.name}?`)) return;
+
+    try {
+        if (cloudReady && auth.currentUser && item.id) {
+            await deleteItemFromCloud(item.id);
+            showToast("Item cloud से delete हो गया।");
+        } else {
+            items.splice(index, 1);
+            cacheItems();
+            renderTable();
+            updateDashboard();
+            showToast("Item delete हो गया।");
+        }
+    } catch (error) {
+        console.error(error);
+        alert("Delete नहीं हुआ। Firebase/Firestore Rules check करें।");
+    }
+}
+
+/* ================= DASHBOARD ================= */
+
+function updateDashboard() {
+    let totalStock = 0;
+    let stockValue = 0;
+    const categories = new Set();
+
+    items.forEach(item => {
+        totalStock += getCurrentStock(item);
+        stockValue += getStockValue(item);
+        categories.add(item.category);
+    });
+
+    const totalItems = document.getElementById("totalItems");
+    const totalStockElement = document.getElementById("totalStock");
+    const stockValueElement = document.getElementById("stockValue");
+    const totalCategories = document.getElementById("totalCategories");
+
+    if (totalItems) totalItems.innerText = items.length;
+    if (totalStockElement) totalStockElement.innerText = totalStock;
+    if (stockValueElement) stockValueElement.innerText = stockValue.toLocaleString("en-IN");
+    if (totalCategories) totalCategories.innerText = categories.size;
+}
+
+/* ================= INVOICE ================= */
+
+function addToInvoice(index) {
+    const item = items[index];
+    if (!item) return;
+
+    if (getCurrentStock(item) <= 0) {
+        return alert("इस item का current stock 0 है।");
+    }
+
+    const existing = invoiceItems.find(invoiceItem => invoiceItem.name === item.name);
+
+    if (existing) existing.quantity += 1;
+    else invoiceItems.push({
+        name: item.name,
+        quantity: 1,
+        price: Number(item.sellPrice) || 0
+    });
+
+    saveInvoice();
+    renderInvoice();
+    showToast(`${item.name} invoice में add हो गया।`);
+    showSection("invoice");
+}
+
+function renderInvoice() {
+    const table = document.getElementById("invoiceTable");
+    if (!table) return;
+
+    table.innerHTML = "";
+    let grandTotal = 0;
+
+    if (invoiceItems.length === 0) {
+        table.innerHTML = `<tr><td colspan="4">Invoice में अभी कोई item नहीं है।</td></tr>`;
+    }
+
+    invoiceItems.forEach((item, index) => {
+        const total = Number(item.quantity) * Number(item.price);
+        grandTotal += total;
+
+        table.innerHTML += `
+            <tr>
+                <td>${escapeHTML(item.name)}</td>
+                <td>
+                    <input type="number" min="1" value="${item.quantity}"
+                        onchange="changeInvoiceQty(${index}, this.value)"
+                        style="width:80px">
+                </td>
+                <td>₹${Number(item.price) || 0}</td>
+                <td>₹${total}</td>
+            </tr>`;
+    });
+
+    const invoiceTotal = document.getElementById("invoiceTotal");
+    if (invoiceTotal) invoiceTotal.innerText = grandTotal.toLocaleString("en-IN");
+}
+
+function changeInvoiceQty(index, quantity) {
+    quantity = Number(quantity);
+
+    if (quantity <= 0) invoiceItems.splice(index, 1);
+    else invoiceItems[index].quantity = quantity;
+
+    saveInvoice();
+    renderInvoice();
+}
+
+function saveInvoice() {
+    localStorage.setItem("invoiceItems", JSON.stringify(invoiceItems));
+}
+
+function printInvoice() {
+    if (invoiceItems.length === 0) {
+        alert("पहले invoice में item add करें!");
+        return;
+    }
+    window.print();
+}
+
+/* ================= HELPERS ================= */
+
+function formatDate(dateString) {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("en-IN");
+}
+
+function escapeHTML(text) {
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function makeId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return "item-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+}
+
+function setSyncStatus(message, ok) {
+    const el = document.getElementById("syncStatus");
+    if (!el) return;
+    el.textContent = message;
+    el.style.background = ok ? "rgba(255,255,255,.14)" : "rgba(180,40,40,.28)";
+}
+
+function showToast(message) {
+    const toast = document.getElementById("toast");
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+}
+
+/* Inline onclick in index.html needs module functions exposed globally. */
+Object.assign(window, {
+    showSection,
+    openAddModal,
+    closeModal,
+    saveItem,
+    renderTable,
+    editItem,
+    deleteItem,
+    addToInvoice,
+    renderInvoice,
+    changeInvoiceQty,
+    printInvoice
+});
