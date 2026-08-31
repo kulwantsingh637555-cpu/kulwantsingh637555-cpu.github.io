@@ -823,3 +823,9 @@ button, input, select {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+
+.sync-row{display:flex;gap:8px;align-items:center;padding:0 15px 14px;}
+.sync-status{flex:1;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.12);font-size:13px;text-align:center;}
+.sync-retry{border:0;border-radius:10px;padding:9px 12px;background:#fff;color:#126b3f;font-weight:700;cursor:pointer;}
+@media(max-width:700px){.sync-row{padding:0 12px 12px}.sync-status{font-size:12px}.sync-retry{padding:8px 10px}}

@@ -62,7 +62,8 @@ async function connectCloudInventory() {
         console.error("Firebase connection error:", error);
         cloudReady = false;
         setSyncStatus("⚠️ Cloud sync unavailable", false);
-        showToast("Firebase connect नहीं हुआ। पहले Anonymous Authentication और Firestore rules check करें।");
+        showFirebaseError(error);
+
     }
 }
 
@@ -118,6 +119,29 @@ function sanitizeItem(item) {
         sellPrice: Number(item.sellPrice) || 0,
         updatedAt: Date.now()
     };
+}
+
+function showFirebaseError(error) {
+    const code = error?.code || "unknown";
+    console.error("Firebase error code:", code, "message:", error?.message || error);
+
+    let message = "Firebase connect नहीं हुआ।";
+    if (code === "auth/operation-not-allowed") {
+        message = "Firebase में Anonymous Authentication OFF है। इसे ON करें।";
+    } else if (code === "auth/unauthorized-domain") {
+        message = "GitHub Pages domain Firebase Authentication में Authorized Domains में add करें।";
+    } else if (code === "permission-denied" || code === "firestore/permission-denied") {
+        message = "Firestore Rules में signed-in users को read/write permission दें।";
+    } else if (code === "failed-precondition") {
+        message = "Firestore database अभी create नहीं हुआ है। Firebase में Firestore Database बनाएं।";
+    } else if (code === "unavailable") {
+        message = "Internet/Firebase connection unavailable है। Internet check करके Retry करें।";
+    }
+    showToast(message);
+}
+
+async function retryCloudSync() {
+    await connectCloudInventory();
 }
 
 /* ================= DATE ================= */
@@ -499,5 +523,6 @@ Object.assign(window, {
     addToInvoice,
     renderInvoice,
     changeInvoiceQty,
-    printInvoice
+    printInvoice,
+    retryCloudSync
 });
