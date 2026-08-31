@@ -33,6 +33,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function connectCloudInventory() {
     setSyncStatus("⏳ Connecting to cloud...", false);
 
+    // Retry should replace the previous Firestore listener, not create duplicates.
+    if (unsubscribeInventory) {
+        unsubscribeInventory();
+        unsubscribeInventory = null;
+    }
+
     try {
         await signInAnonymously(auth);
 
@@ -128,6 +134,8 @@ function showFirebaseError(error) {
     let message = "Firebase connect नहीं हुआ।";
     if (code === "auth/operation-not-allowed") {
         message = "Firebase में Anonymous Authentication OFF है। इसे ON करें।";
+    } else if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") {
+        message = "Firebase API key invalid है। Firebase Console → Project settings → Your apps → Web app से सही firebaseConfig की apiKey डालें।";
     } else if (code === "auth/unauthorized-domain") {
         message = "GitHub Pages domain Firebase Authentication में Authorized Domains में add करें।";
     } else if (code === "permission-denied" || code === "firestore/permission-denied") {
