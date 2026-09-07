@@ -4,48 +4,175 @@
    LocalStorage = offline cache / first-time migration only
    ===================================================== */
 
-import { db, auth } from "./firebase.js";
+import { db, auth, secondaryAuth } from "./firebase.js";
 import {
-    collection, doc, setDoc, deleteDoc, getDocs, onSnapshot
+    collection, doc, setDoc, deleteDoc, getDocs, getDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+    signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 let items = JSON.parse(localStorage.getItem("vegetableItems") || "[]");
 let invoiceItems = JSON.parse(localStorage.getItem("invoiceItems") || "[]");
 let unsubscribeInventory = null;
 let cloudReady = false;
 let toastTimer = null;
+let currentProfile = null;
 
+/* ================= AUTH + PAGE LOAD ================= */
+
+const ADMIN_LOGIN_ID = "superadmin";
+const ADMIN_EMAIL = "superadmin@smartvegetablestore.com";
+const ADMIN_PASSWORD = "superadmin@1234";
 const INVENTORY_COLLECTION = "vegetableItems";
 
-/* ================= PAGE LOAD ================= */
+function loginEmailFromId(userId) {
+    const id = String(userId || "").trim().toLowerCase();
+    if (id === ADMIN_LOGIN_ID) return ADMIN_EMAIL;
+    return `${id}@smartvegetablestore.local`;
+}
 
-document.addEventListener("DOMContentLoaded", async () => {
+function setAuthMessage(message, error = false) {
+    const el = document.getElementById("loginMessage");
+    if (el) {
+        el.textContent = message;
+        el.className = "login-message" + (error ? " error" : "");
+    }
+}
+
+function setAdminMessage(message, error = false) {
+    const el = document.getElementById("adminMessage");
+    if (el) {
+        el.textContent = message;
+        el.className = "login-message" + (error ? " error" : "");
+    }
+}
+
+function showApp() {
+    document.getElementById("authScreen")?.classList.add("hidden");
+}
+
+function showLogin() {
+    document.getElementById("authScreen")?.classList.remove("hidden");
+    document.querySelector(".app")?.classList.add("app-locked");
+}
+
+async function loginUser() {
+    const userId = document.getElementById("loginUserId")?.value.trim().toLowerCase();
+    const password = document.getElementById("loginPassword")?.value || "";
+    if (!userId || !password) return setAuthMessage("User ID और Password दोनों भरें।", true);
+
+    setAuthMessage("Login हो रहा है...");
+    try {
+        const email = loginEmailFromId(userId);
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (loginError) {
+            // First login: automatically create the fixed Super Admin account.
+            // This removes the need to manually create the Super Admin in Firebase Auth.
+            if (userId === ADMIN_LOGIN_ID && password === ADMIN_PASSWORD &&
+                ["auth/user-not-found", "auth/invalid-credential"].includes(loginError?.code)) {
+                await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+            } else {
+                throw loginError;
+            }
+        }
+    } catch (error) {
+        console.error("Login error:", error);
+        const code = error?.code || "";
+        let msg = "Login नहीं हुआ। User ID या Password check करें।";
+        if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") msg = "User ID या Password गलत है।";
+        if (code === "auth/too-many-requests") msg = "बहुत ज्यादा कोशिशें हुई हैं। थोड़ी देर बाद फिर try करें।";
+        if (code === "auth/operation-not-allowed") msg = "Firebase Authentication में Email/Password enable करें।";
+        setAuthMessage(msg, true);
+    }
+}
+
+async function logoutUser() {
+    if (unsubscribeInventory) { unsubscribeInventory(); unsubscribeInventory = null; }
+    cloudReady = false;
+    await signOut(auth);
+}
+
+async function handleAuthenticatedUser(user) {
+    if (!user) {
+        showLogin();
+        document.getElementById("currentUserLabel").textContent = "-";
+        return;
+    }
+
+    try {
+        const userRef = doc(db, "users", user.uid);
+        const profileSnap = await getDoc(userRef);
+        let profile;
+
+        // The only automatic admin bootstrap is the fixed Super Admin account.
+        // Create this account once in Firebase Authentication with the email below.
+        if (!profileSnap.exists() && user.email === ADMIN_EMAIL) {
+            profile = {
+                uid: user.uid,
+                userId: ADMIN_LOGIN_ID,
+                email: user.email,
+                role: "superadmin",
+                active: true,
+                createdAt: Date.now()
+            };
+            await setDoc(userRef, profile);
+        } else if (!profileSnap.exists()) {
+            await signOut(auth);
+            setAuthMessage("यह User अभी Super Admin ने create नहीं किया है।", true);
+            return;
+        } else {
+            profile = profileSnap.data();
+        }
+
+        if (profile.active !== true) {
+            await signOut(auth);
+            setAuthMessage("यह account अभी Disabled है। Super Admin से contact करें।", true);
+            return;
+        }
+
+        currentProfile = profile;
+        showApp();
+        document.querySelector(".app")?.classList.remove("app-locked");
+        document.getElementById("currentUserLabel").textContent = `${profile.userId || user.email}${profile.role === "superadmin" ? " (Super Admin)" : ""}`;
+        const adminBtn = document.getElementById("adminNavBtn");
+        if (adminBtn) adminBtn.style.display = profile.role === "superadmin" ? "block" : "none";
+
+        setTodayDate();
+        renderTable();
+        updateDashboard();
+        renderInvoice();
+        await connectCloudInventory();
+        if (profile.role === "superadmin") await loadUsers();
+    } catch (error) {
+        console.error("Profile error:", error);
+        await signOut(auth);
+        setAuthMessage("Account profile load नहीं हुआ। Firestore Rules check करें।", true);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
     setTodayDate();
     renderTable();
     updateDashboard();
     renderInvoice();
-    await connectCloudInventory();
+    showLogin();
+    onAuthStateChanged(auth, handleAuthenticatedUser);
 });
 
 /* ================= CLOUD SYNC ================= */
 
 async function connectCloudInventory() {
     setSyncStatus("⏳ Connecting to cloud...", false);
-
-    // Retry should replace the previous Firestore listener, not create duplicates.
-    if (unsubscribeInventory) {
-        unsubscribeInventory();
-        unsubscribeInventory = null;
-    }
+    if (unsubscribeInventory) { unsubscribeInventory(); unsubscribeInventory = null; }
+    if (!auth.currentUser) return;
 
     try {
-        await signInAnonymously(auth);
-
         const snap = await getDocs(collection(db, INVENTORY_COLLECTION));
 
-        // First device: migrate existing local inventory only if cloud is empty.
-        if (snap.empty && items.length > 0) {
+        // Keep old data: if the shared collection is empty, Super Admin's old local data can be migrated.
+        if (snap.empty && currentProfile?.role === "superadmin" && items.length > 0) {
             for (const item of items) {
                 const id = item.id || makeId();
                 item.id = id;
@@ -53,7 +180,6 @@ async function connectCloudInventory() {
             }
         }
 
-        // If cloud already has data, cloud is authoritative.
         if (!snap.empty) {
             items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             cacheItems();
@@ -69,26 +195,20 @@ async function connectCloudInventory() {
         cloudReady = false;
         setSyncStatus("⚠️ Cloud sync unavailable", false);
         showFirebaseError(error);
-
     }
 }
 
 function subscribeToInventory() {
     if (unsubscribeInventory) unsubscribeInventory();
-
+    if (!auth.currentUser) return;
     unsubscribeInventory = onSnapshot(
         collection(db, INVENTORY_COLLECTION),
         snapshot => {
-            items = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            }));
-
+            items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             cacheItems();
             renderTable();
             updateDashboard();
             renderInvoice();
-
             setSyncStatus("☁️ Cloud sync ON", true);
         },
         error => {
@@ -99,13 +219,9 @@ function subscribeToInventory() {
 }
 
 async function saveItemToCloud(item) {
-    if (!auth.currentUser) {
-        throw new Error("Cloud login not ready");
-    }
-
+    if (!auth.currentUser || !currentProfile?.active) throw new Error("Cloud login not ready");
     const id = item.id || makeId();
     const clean = sanitizeItem({ ...item, id });
-
     await setDoc(doc(db, INVENTORY_COLLECTION, id), clean);
     return id;
 }
@@ -123,34 +239,110 @@ function sanitizeItem(item) {
         stockOut: Number(item.stockOut) || 0,
         buyPrice: Number(item.buyPrice) || 0,
         sellPrice: Number(item.sellPrice) || 0,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        updatedBy: auth.currentUser?.uid || ""
     };
 }
 
 function showFirebaseError(error) {
     const code = error?.code || "unknown";
     console.error("Firebase error code:", code, "message:", error?.message || error);
-
     let message = "Firebase connect नहीं हुआ।";
-    if (code === "auth/operation-not-allowed") {
-        message = "Firebase में Anonymous Authentication OFF है। इसे ON करें।";
-    } else if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") {
-        message = "Firebase API key invalid है। Firebase Console → Project settings → Your apps → Web app से सही firebaseConfig की apiKey डालें।";
-    } else if (code === "auth/unauthorized-domain") {
-        message = "GitHub Pages domain Firebase Authentication में Authorized Domains में add करें।";
-    } else if (code === "permission-denied" || code === "firestore/permission-denied") {
-        message = "Firestore Rules में signed-in users को read/write permission दें।";
-    } else if (code === "failed-precondition") {
-        message = "Firestore database अभी create नहीं हुआ है। Firebase में Firestore Database बनाएं।";
-    } else if (code === "unavailable") {
-        message = "Internet/Firebase connection unavailable है। Internet check करके Retry करें।";
-    }
-    showToast(message);
+    if (code === "auth/operation-not-allowed") message = "Firebase Authentication में Email/Password ON करें।";
+    else if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") message = "Firebase API key invalid है। Firebase Console से सही Web App config डालें।";
+    else if (code === "auth/unauthorized-domain") message = "GitHub Pages domain Firebase Authentication के Authorized Domains में add करें।";
+    else if (code === "permission-denied" || code === "firestore/permission-denied") message = "Firestore Rules में इस account की permission check करें।";
+    else if (code === "failed-precondition") message = "Firestore database create/enable करें।";
+    const el = document.getElementById("syncStatus");
+    if (el) el.title = message;
 }
 
-async function retryCloudSync() {
-    await connectCloudInventory();
+async function retryCloudSync() { await connectCloudInventory(); }
+
+/* ================= USER MANAGEMENT ================= */
+
+function assertAdmin() {
+    if (currentProfile?.role !== "superadmin" || currentProfile?.active !== true) {
+        throw new Error("Super Admin permission required");
+    }
 }
+
+async function createManagedUser() {
+    try {
+        assertAdmin();
+        const userId = document.getElementById("newUserId")?.value.trim().toLowerCase();
+        const password = document.getElementById("newUserPassword")?.value || "";
+        if (!/^[a-z0-9._-]{3,30}$/.test(userId || "")) return setAdminMessage("User ID में 3-30 letters/numbers और . _ - ही रखें।", true);
+        if (userId === ADMIN_LOGIN_ID) return setAdminMessage("superadmin reserved User ID है।", true);
+        if (password.length < 6) return setAdminMessage("Password कम से कम 6 characters का होना चाहिए।", true);
+
+        setAdminMessage("User create हो रहा है...");
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, loginEmailFromId(userId), password);
+        await setDoc(doc(db, "users", credential.user.uid), {
+            uid: credential.user.uid,
+            userId,
+            email: credential.user.email,
+            role: "user",
+            active: true,
+            createdAt: Date.now(),
+            createdBy: auth.currentUser.uid
+        });
+        await signOut(secondaryAuth);
+        document.getElementById("newUserId").value = "";
+        document.getElementById("newUserPassword").value = "";
+        setAdminMessage(`User ${userId} successfully create हो गया।`);
+        await loadUsers();
+    } catch (error) {
+        console.error("Create user error:", error);
+        let msg = error.message || "User create नहीं हुआ।";
+        if (error.code === "auth/email-already-in-use") msg = "यह User ID पहले से मौजूद है।";
+        if (error.code === "auth/weak-password") msg = "Password बहुत weak है।";
+        setAdminMessage(msg, true);
+        try { await signOut(secondaryAuth); } catch (_) {}
+    }
+}
+
+async function loadUsers() {
+    if (currentProfile?.role !== "superadmin") return;
+    const list = document.getElementById("usersList");
+    if (!list) return;
+    try {
+        const snap = await getDocs(collection(db, "users"));
+        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (!users.length) { list.innerHTML = "<p>No users found.</p>"; return; }
+        users.sort((a,b) => (a.userId || "").localeCompare(b.userId || ""));
+        list.innerHTML = users.map(u => `
+          <div class="user-row">
+            <div><strong>${escapeHTML(u.userId || "")}</strong><small>${escapeHTML(u.role || "user")} · ${escapeHTML(u.email || "")}</small></div>
+            <div class="user-actions">
+              ${u.role === "superadmin" ? '<span class="admin-tag">SUPER ADMIN</span>' : `<button class="small-btn" onclick="toggleManagedUser('${u.id}', ${u.active !== true})">${u.active === true ? "Disable" : "Enable"}</button><button class="small-delete" onclick="removeManagedUser('${u.id}')">Remove</button>`}
+            </div>
+          </div>`).join("");
+    } catch (error) {
+        console.error(error);
+        list.innerHTML = "<p>Users load नहीं हुए। Rules check करें।</p>";
+    }
+}
+
+async function toggleManagedUser(uid, makeActive) {
+    try {
+        assertAdmin();
+        await setDoc(doc(db, "users", uid), { active: !!makeActive, updatedAt: Date.now() }, { merge: true });
+        await loadUsers();
+        showToast(makeActive ? "User enabled." : "User disabled.");
+    } catch (error) { alert("User status change नहीं हुआ।"); }
+}
+
+async function removeManagedUser(uid) {
+    try {
+        assertAdmin();
+        if (!confirm("इस user को app/website access से remove करना है?")) return;
+        await deleteDoc(doc(db, "users", uid));
+        await loadUsers();
+        showToast("User access remove हो गया।");
+    } catch (error) { alert("User remove नहीं हुआ।"); }
+}
+
 
 /* ================= DATE ================= */
 
@@ -184,7 +376,7 @@ function showSection(sectionName) {
     });
 
     const navButtons = document.querySelectorAll(".nav-btn");
-    const map = { dashboard: 0, inventory: 1, invoice: 2 };
+    const map = { dashboard: 0, inventory: 1, invoice: 2, admin: 3 };
 
     if (navButtons[map[sectionName]]) {
         navButtons[map[sectionName]].classList.add("active");
@@ -192,6 +384,7 @@ function showSection(sectionName) {
 
     if (sectionName === "inventory") renderTable();
     if (sectionName === "invoice") renderInvoice();
+    if (sectionName === "admin" && currentProfile?.role === "superadmin") loadUsers();
 
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -268,6 +461,7 @@ async function saveItem() {
         alert("Item save नहीं हुआ। Firebase/Firestore Rules check करें।");
     }
 }
+
 
 /* ================= LOCAL CACHE ================= */
 
@@ -532,5 +726,11 @@ Object.assign(window, {
     renderInvoice,
     changeInvoiceQty,
     printInvoice,
-    retryCloudSync
+    retryCloudSync,
+    loginUser,
+    logoutUser,
+    createManagedUser,
+    loadUsers,
+    toggleManagedUser,
+    removeManagedUser
 });

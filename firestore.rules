@@ -2,8 +2,25 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function activeUser() { return signedIn() && userDoc().data.active == true; }
+    function isAdmin() { return signedIn() && userDoc().data.role == "superadmin" && userDoc().data.active == true; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isAdmin() || (request.auth.uid == uid && request.resource.data.role == "superadmin" && request.auth.token.email == "superadmin@smartvegetablestore.com");
+      allow update: if isAdmin() || (request.auth.uid == uid && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /users/{uid}/inventory/{itemId} {
+      allow read, write: if activeUser() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // Temporary compatibility for old global inventory. Keep locked for authenticated users only.
     match /vegetableItems/{itemId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin();
     }
   }
 }

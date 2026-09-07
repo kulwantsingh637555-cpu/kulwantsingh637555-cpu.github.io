@@ -1,0 +1,12 @@
+SMART VEGETABLE STORE - LOGIN FIXED
+
+Super Admin login:
+ID: superadmin
+Password: superadmin@1234
+
+FIRST LOGIN:
+The website automatically creates the Super Admin Firebase Authentication account on the first successful use of these exact credentials. No manual Firebase Auth user creation is required.
+
+Firebase Authentication -> Sign-in method -> Email/Password must be enabled.
+
+After login, Super Admin can create users with any User ID and password (minimum 6 characters). Passwords are stored by Firebase Authentication, not Firestore.
