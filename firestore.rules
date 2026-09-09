@@ -5,7 +5,7 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function activeUser() { return signedIn() && userDoc().data.active == true; }
-    function isAdmin() { return signedIn() && userDoc().data.role == "superadmin" && userDoc().data.active == true; }
+    function isAdmin() { return signedIn() && userDoc().data.active == true && (userDoc().data.role in ["admin", "developer", "superadmin"] || userDoc().data.department in ["admin", "developer", "superadmin", "Admin", "Developer", "Super Admin"]); }
 
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());

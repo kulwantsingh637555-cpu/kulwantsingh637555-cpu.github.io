@@ -13,9 +13,13 @@
     <div class="auth-logo">🥬 Smart Vegetable Store</div>
     <h2>Login</h2>
     <p class="auth-help">Super Admin या User ID और Password से login करें</p>
-    <input id="loginUserId" type="text" placeholder="User ID" autocomplete="username">
-    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
-    <small style="display:block;color:#68716b;margin:2px 0 10px">Super Admin password: <strong>superadmin@1234</strong></small>
+    <label for="loginUserId" style="display:block;text-align:left;margin-bottom:6px;color:#445048;font-weight:600;">Email</label>
+        <input id="loginUserId" type="text" placeholder="Email or Worker Name" autocomplete="username">
+        <div class="password-field">
+            <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+            <button type="button" class="password-toggle" onclick="toggleLoginPassword()" aria-label="Show password">Show</button>
+        </div>
+    <small style="display:block;color:#68716b;margin:2px 0 10px">Super Admin: <strong>superadmin@smartvegetablestore.com</strong> / <strong>superadmin@1234</strong></small>
     <button class="primary-btn full-btn" onclick="loginUser()">🔐 Login</button>
     <div id="loginMessage" class="login-message"></div>
   </div>
@@ -28,7 +32,7 @@
         
 
         <div class="logo">🥬 <span>Smart Vegetable Store</span></div>
-        <div class="sync-row"><div id="syncStatus" class="sync-status">⏳ Connecting to cloud...</div><button class="sync-retry" onclick="retryCloudSync()">↻ Retry</button></div>
+        <div class="sync-row"><div id="syncStatus" class="sync-status">⏳ Connecting to cloud...</div></div>
 
         <nav class="main-nav">
             <button class="nav-btn active" onclick="showSection('dashboard')">
@@ -43,7 +47,23 @@
                 🧾 Invoice
             </button>
 
-            <button id="adminNavBtn" class="nav-btn" onclick="showSection('admin')" style="display:none">
+            <button class="nav-btn" onclick="showSection('roster')">
+                🗓️ Duty Roster
+            </button>
+
+            <button class="nav-btn" onclick="showSection('payroll')">
+                💸 Payroll
+            </button>
+
+            <button class="nav-btn" onclick="showSection('maintenance')">
+                🔧 Maintenance
+            </button>
+
+            <button class="nav-btn" onclick="showSection('agriculture')">
+                🌾 Agriculture Expenses
+            </button>
+
+            <button id="adminNavBtn" class="nav-btn" onclick="showSection('admin')">
                 👑 User Management
             </button>
         </nav>
@@ -111,8 +131,31 @@
                     </div>
                 </div>
 
-            </div>
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div>
+                        <p>Customers</p>
+                        <h3 id="customerCount">0</h3>
+                    </div>
+                </div>
 
+                <div class="stat-card">
+                    <div class="stat-icon">🚚</div>
+                    <div>
+                        <p>Vendors</p>
+                        <h3 id="vendorCount">0</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🧑‍💼</div>
+                    <div>
+                        <p>Sellers</p>
+                        <h3 id="sellerCount">0</h3>
+                    </div>
+                </div>
+
+            </div>
 
             <div class="quick-box">
 
@@ -213,22 +256,309 @@
 
         <!-- ================= USER MANAGEMENT ================= -->
         <section id="admin" class="section">
+            <div class="section-title users-page-title">
+                <div><h2>👑 User Management</h2><p>System access and worker account management.</p></div>
+                <button id="addManagedUserBtn" class="primary-btn" onclick="openManagedUserEditor()">➕ Add User</button>
+            </div>
+
+            <div class="user-summary-stats">
+                <div class="user-summary-card active"><span>Total Users</span><strong id="totalUsersCount">0</strong></div>
+                <div class="user-summary-card"><span>Active</span><strong id="activeUsersCount">0</strong></div>
+                <div class="user-summary-card"><span>Disabled</span><strong id="disabledUsersCount">0</strong></div>
+                <div class="user-summary-card"><span>Workers</span><strong id="workerUsersCount">0</strong></div>
+            </div>
+
+            <div class="users-toolbar">
+                <select id="userRoleFilter" onchange="filterManagedUsers()">
+                    <option value="">All Roles</option>
+                    <option value="superadmin">Super Admin</option>
+                    <option value="admin">Admin</option>
+                    <option value="developer">Developer</option>
+                    <option value="user">Worker</option>
+                </select>
+                <input id="userSearchInput" type="search" placeholder="🔍 Search by name, email, role..." oninput="filterManagedUsers()">
+            </div>
+
+            <div class="admin-card users-table-card">
+                <div class="users-table-heading"><h3>👥 Users</h3><span class="muted-text">Password Firebase Authentication में secure रहता है।</span></div>
+                <div id="usersList" class="users-list"><p>Loading...</p></div>
+            </div>
+
+            <div id="managedUserEditor" class="roster-shift-editor" hidden>
+                <div class="roster-shift-editor-card managed-user-editor-card">
+                    <h3 id="managedUserEditorTitle">➕ Create User</h3>
+                    <input id="newUserName" type="text" placeholder="Worker Name" autofocus>
+                    <input id="newUserEmail" type="email" placeholder="Real Email">
+                    <input id="newUserRole" type="text" placeholder="Role / Department">
+                    <select id="newUserAccessRole">
+                        <option value="user">Worker</option>
+                        <option value="manager">Manager</option>
+                        <option value="agriculture">Agriculture</option>
+                        <option value="developer">Developer</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <input id="newUserSalary" type="number" min="0" step="0.01" placeholder="Monthly Salary">
+                    <input id="newUserPassword" type="password" placeholder="Password (min 6 characters)">
+                    <small class="managed-user-note">Real email login में use होगा। Password Users list में कभी नहीं दिखेगा।</small>
+                    <button id="managedUserSubmit" class="primary-btn full-btn" onclick="createManagedUser()">Create User</button>
+                    <button type="button" class="secondary-btn full-btn" onclick="closeManagedUserEditor()">Cancel</button>
+                    <div id="adminMessage" class="login-message"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="vendors-section" class="section">
             <div class="section-header">
-                <div><h2>👑 User Management</h2><p class="muted-text">Super Admin users बना, active/disable और remove कर सकता है।</p></div>
+                <div><h2>🚚 Vendor</h2><p class="muted-text">Supplier / vendor details and contact information.</p></div>
             </div>
             <div class="admin-grid">
               <div class="admin-card">
-                <h3>➕ Create User</h3>
-                <input id="newUserId" type="text" placeholder="User ID (e.g. shop01)">
-                <input id="newUserPassword" type="password" placeholder="Password (min 6 characters)">
-                <small style="display:block;color:#68716b;margin:2px 0 10px">Admin अपनी पसंद का User ID और Password बना सकता है।</small>
-                <button class="primary-btn full-btn" onclick="createManagedUser()">Create User</button>
-                <div id="adminMessage" class="login-message"></div>
+                <h3>➕ Add Vendor</h3>
+                <input id="vendorName" type="text" placeholder="Vendor Name">
+                <input id="vendorPhone" type="text" placeholder="Phone Number">
+                <input id="vendorCity" type="text" placeholder="City">
+                <textarea id="vendorAddress" rows="3" placeholder="Address"></textarea>
+                <button class="primary-btn full-btn" onclick="addVendorFromDashboard()">Add Vendor</button>
               </div>
-              <div class="admin-card">
-                <h3>👥 Users</h3>
-                <div id="usersList" class="users-list"><p>Loading...</p></div>
-              </div>
+            </div>
+        </section>
+
+        <section id="roster" class="section">
+            <div class="section-title roster-title">
+                <div>
+                    <h2>🗓️ Duty Roster</h2>
+                    <p>Plan weekly shifts for your workers.</p>
+                </div>
+                <button class="primary-btn" onclick="openRosterWorkerEditor()">
+                    ➕ Add Worker
+                </button>
+            </div>
+
+            <div class="roster-toolbar">
+                <button class="secondary-btn" onclick="changeRosterWeek(-1)">‹</button>
+                <button class="secondary-btn" onclick="setRosterCurrentWeek()">📅 This Week</button>
+                <strong id="rosterWeekLabel"></strong>
+                <button class="secondary-btn" onclick="changeRosterWeek(1)">›</button>
+            </div>
+
+            <div class="stats roster-stats">
+                <div class="stat-card"><div class="stat-icon">👥</div><div><p>Workers</p><h3 id="rosterWorkerCount">0</h3></div></div>
+                <div class="stat-card"><div class="stat-icon">🕘</div><div><p>Scheduled Shifts</p><h3 id="rosterShiftCount">0</h3></div></div>
+                <div class="stat-card"><div class="stat-icon">⭕</div><div><p>Open Slots</p><h3 id="rosterOpenCount">0</h3></div></div>
+            </div>
+
+            <div id="rosterWorkerEditor" class="roster-shift-editor" hidden>
+                <div class="roster-shift-editor-card roster-worker-editor-card">
+                    <h3>➕ Add Worker</h3>
+                    <input id="rosterWorkerName" type="text" placeholder="Worker Name">
+                    <input id="rosterWorkerRole" type="text" placeholder="Role / Department">
+                    <input id="rosterWorkerPhone" type="text" placeholder="Phone Number">
+                    <button class="primary-btn full-btn" onclick="addRosterWorker()">Add Worker</button>
+                    <button type="button" class="secondary-btn full-btn" onclick="closeRosterWorkerEditor()">Cancel</button>
+                    <p class="roster-help">After adding a worker, click any <strong>Add</strong> cell to assign a shift.</p>
+                </div>
+            </div>
+
+            <div class="admin-grid roster-layout">
+                <div class="admin-card roster-card">
+                    <div class="roster-card-header">
+                        <h3>👥 Weekly Staff Schedule</h3>
+                        <span class="roster-legend">Click a shift to edit or remove</span>
+                    </div>
+                    <div class="table-container roster-table-container">
+                        <table class="roster-table">
+                            <thead id="rosterHead"></thead>
+                            <tbody id="rosterTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rosterShiftEditor" class="roster-shift-editor" hidden>
+                <div class="roster-shift-editor-card">
+                    <h3>🕘 Assign Duty Shift</h3>
+                    <p id="rosterShiftEditorDate" class="muted-text">Full duty: 10 hours | Half duty: 5 hours</p>
+                    <select id="rosterShiftValue">
+                        <option value="Morning">Morning (10 Hours)</option>
+                        <option value="Evening">Evening (10 Hours)</option>
+                        <option value="Night">Night (10 Hours)</option>
+                        <option value="Half Day">Half Duty (5 Hours)</option>
+                        <option value="Leave">Leave</option>
+                        <option value="Day Off">Day Off</option>
+                    </select>
+                    <div class="roster-shift-editor-actions">
+                        <button type="button" class="secondary-btn" onclick="closeRosterShiftEditor()">Cancel</button>
+                        <button type="button" class="small-delete" onclick="removeRosterShift()">Remove</button>
+                        <button type="button" class="primary-btn" onclick="saveRosterShift()">Save Shift</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="payroll" class="section">
+            <div class="section-header">
+                <div><h2>💸 Payroll</h2><p class="muted-text">Salary, advance, and cash in/out tracking.</p></div>
+            </div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div>
+                        <p>Salary Paid</p>
+                        <h3>₹<span id="salaryPaidTotal">0</span></h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📥</div>
+                    <div>
+                        <p>Cash In</p>
+                        <h3>₹<span id="cashInTotal">0</span></h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🧾</div>
+                    <div>
+                        <p>Advance / Udhari</p>
+                        <h3>₹<span id="advanceTotal">0</span></h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-card roster-payroll-card">
+                <div class="users-table-heading roster-payroll-heading">
+                    <div><h3>🔗 Duty Roster Salary</h3><span class="muted-text">Only scheduled duties count. Leave and Day Off are excluded.</span></div>
+                    <div class="roster-payroll-controls">
+                        <input id="payrollMonth" type="month" onchange="renderRosterPayroll()">
+                        <button class="primary-btn" onclick="generateRosterPayroll()">⚡ Generate Salary</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Worker</th><th>Duty Days</th><th>Monthly Salary</th><th>Auto Salary</th></tr></thead>
+                        <tbody id="rosterPayrollTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <h3>➕ Add Payroll Entry</h3>
+                    <input id="payrollEmployee" list="workerOptions" type="text" placeholder="Employee / Staff Name" onchange="fillWorkerSalary('payrollEmployee', 'payrollAmount')">
+                    <select id="payrollType">
+                        <option value="Salary">Salary</option>
+                        <option value="Advance">Advance / Udhari</option>
+                        <option value="Cash In">Cash In</option>
+                        <option value="Bonus">Bonus</option>
+                        <option value="Deduction">Deduction</option>
+                    </select>
+                    <input id="payrollAmount" type="number" min="0" step="0.01" placeholder="Amount">
+                    <input id="payrollDate" type="date">
+                    <textarea id="payrollNotes" rows="3" placeholder="Notes / Remarks"></textarea>
+                    <button class="primary-btn full-btn" onclick="addPayrollEntry()">Add Payroll</button>
+                </div>
+
+                <div class="admin-card">
+                    <h3>📋 Payroll Entries</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Employee</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Notes</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payrollTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="maintenance" class="section">
+            <div class="section-title maintenance-title">
+                <div><h2>🔧 Maintenance</h2><p>Track store repairs and maintenance expenses.</p></div>
+            </div>
+
+            <div class="stats maintenance-stats">
+                <div class="stat-card"><div class="stat-icon">🧾</div><div><p>Total Entries</p><h3 id="maintenanceEntryCount">0</h3></div></div>
+                <div class="stat-card"><div class="stat-icon">💰</div><div><p>This Month Expense</p><h3>₹<span id="maintenanceMonthTotal">0</span></h3></div></div>
+                <div class="stat-card"><div class="stat-icon">🔧</div><div><p>Total Expense</p><h3>₹<span id="maintenanceTotal">0</span></h3></div></div>
+            </div>
+
+            <div class="admin-grid maintenance-layout">
+                <div class="admin-card">
+                    <h3>➕ Add Repair Expense</h3>
+                    <input id="maintenanceTitle" type="text" placeholder="Repair / Item Name">
+                    <select id="maintenanceCategory">
+                        <option value="Equipment Repair">Equipment Repair</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Cleaning">Cleaning</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <input id="maintenanceAmount" type="number" min="0" step="0.01" placeholder="Amount">
+                    <input id="maintenanceDate" type="date">
+                    <input id="maintenanceVendor" type="text" placeholder="Technician / Vendor">
+                    <textarea id="maintenanceNotes" rows="3" placeholder="Notes / Details"></textarea>
+                    <button class="primary-btn full-btn" onclick="addMaintenanceEntry()">Add Expense</button>
+                </div>
+
+                <div class="admin-card maintenance-table-card">
+                    <div class="users-table-heading"><h3>📋 Repair Entries</h3><input id="maintenanceMonth" type="month" onchange="renderMaintenance()"></div>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Date</th><th>Repair / Item</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Notes</th><th>Action</th></tr></thead>
+                            <tbody id="maintenanceTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="agriculture" class="section">
+            <div class="section-title maintenance-title">
+                <div><h2>🌾 Agriculture Expenses</h2><p>Track tractor, fuel, seeds, medicines and farm expenses.</p></div>
+            </div>
+
+            <div class="stats maintenance-stats">
+                <div class="stat-card"><div class="stat-icon">🧾</div><div><p>Total Entries</p><h3 id="agricultureEntryCount">0</h3></div></div>
+                <div class="stat-card"><div class="stat-icon">💰</div><div><p>This Month Expense</p><h3>₹<span id="agricultureMonthTotal">0</span></h3></div></div>
+                <div class="stat-card"><div class="stat-icon">🌾</div><div><p>Total Expense</p><h3>₹<span id="agricultureTotal">0</span></h3></div></div>
+            </div>
+
+            <div class="admin-grid maintenance-layout">
+                <div class="admin-card">
+                    <h3>➕ Add Agriculture Expense</h3>
+                    <input id="agricultureTitle" type="text" placeholder="Expense Name">
+                    <select id="agricultureCategory">
+                        <option value="Tractor">Tractor</option>
+                        <option value="Fuel / Diesel">Fuel / Diesel</option>
+                        <option value="Seeds">Seeds / Beej</option>
+                        <option value="Medicine / Pesticide">Medicine / Dava / Pesticide</option>
+                        <option value="Fertilizer">Fertilizer / Khad</option>
+                        <option value="Farm Labor">Farm Labor</option>
+                        <option value="Irrigation">Irrigation / Water</option>
+                        <option value="Other">Other Expense</option>
+                    </select>
+                    <input id="agricultureAmount" type="number" min="0" step="0.01" placeholder="Amount">
+                    <input id="agricultureDate" type="date">
+                    <input id="agricultureVendor" type="text" placeholder="Supplier / Person">
+                    <textarea id="agricultureNotes" rows="3" placeholder="Notes / Details"></textarea>
+                    <button class="primary-btn full-btn" onclick="addAgricultureExpense()">Add Expense</button>
+                </div>
+
+                <div class="admin-card maintenance-table-card">
+                    <div class="users-table-heading"><h3>📋 Agriculture Entries</h3><input id="agricultureMonth" type="month" onchange="renderAgricultureExpenses()"></div>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Date</th><th>Expense</th><th>Category</th><th>Supplier</th><th>Amount</th><th>Notes</th><th>Action</th></tr></thead>
+                            <tbody id="agricultureTable"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -314,6 +644,34 @@
 
             </div>
 
+        </section>
+
+        <section class="section">
+            <div class="stats" style="margin-top: 0;">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div>
+                        <p>Customers</p>
+                        <h3 id="customerCount">0</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🚚</div>
+                    <div>
+                        <p>Vendors</p>
+                        <h3 id="vendorCount">0</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🧑‍💼</div>
+                    <div>
+                        <p>Sellers</p>
+                        <h3 id="sellerCount">0</h3>
+                    </div>
+                </div>
+            </div>
         </section>
 
     </main>
@@ -445,5 +803,6 @@
 
 
     <script type="module" src="script.js"></script>
+    <datalist id="workerOptions"></datalist>
 </body>
 </html>

@@ -1,0 +1,17 @@
+EMAIL FIX
+
+New users:
+- User ID: your chosen ID
+- Real Email: e.g. Ashok@gmail.com
+- Password: your chosen password
+
+The app no longer creates a new user's Firebase account with @smartvegetablestore.local.
+If an old account already exists with @smartvegetablestore.local, its Firebase Authentication
+email must be changed/recreated in Firebase; client-side code cannot change another user's Auth
+email. Do not store or display passwords in Firestore or the Users list.
+
+For the existing Ashok/akshat accounts, make sure Firebase Authentication has the real emails:
+Ashok@gmail.com
+akshat@gmail.com
+
+Then use those emails in the Login box.
