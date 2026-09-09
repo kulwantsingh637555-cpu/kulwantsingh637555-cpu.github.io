@@ -1056,10 +1056,12 @@ async function loadRosterCloud() {
         ]);
 
         if (workerSnap.empty && isPrivilegedRole() && rosterWorkers.length) {
-            await Promise.all(rosterWorkers.map(worker => saveRosterWorkerCloud(worker)));
+            const results = await Promise.all(rosterWorkers.map(worker => saveRosterWorkerCloud(worker)));
+            if (results.some(result => result !== true)) throw new Error("Roster worker migration was rejected");
         }
         if (shiftSnap.empty && isPrivilegedRole() && Object.keys(dutyRoster).length) {
-            await Promise.all(Object.entries(dutyRoster).map(([key, shift]) => saveRosterShiftCloud(key, shift)));
+            const results = await Promise.all(Object.entries(dutyRoster).map(([key, shift]) => saveRosterShiftCloud(key, shift)));
+            if (results.some(result => result !== true)) throw new Error("Roster shift migration was rejected");
         }
 
         if (!workerSnap.empty) {
@@ -1072,26 +1074,33 @@ async function loadRosterCloud() {
             localStorage.setItem("dutyRoster", JSON.stringify(dutyRoster));
         }
         renderWorkerOptions();
+        setSyncStatus("☁️ Roster sync ON", true);
     } catch (error) {
         console.error("Roster cloud load error:", error);
+        setSyncStatus("⚠️ Roster sync unavailable", false);
+        showToast("Shared roster load नहीं हुआ। Firestore rules deploy करें।");
     }
 }
 
 async function saveRosterWorkerCloud(worker) {
-    if (!auth.currentUser || !currentProfile?.active) return;
+    if (!auth.currentUser || !currentProfile?.active) return false;
     try {
         await setDoc(doc(db, "rosterWorkers", worker.id), worker);
+        return true;
     } catch (error) {
         console.error("Roster worker cloud save error:", error);
+        return false;
     }
 }
 
 async function saveRosterShiftCloud(key, shift) {
-    if (!auth.currentUser || !currentProfile?.active) return;
+    if (!auth.currentUser || !currentProfile?.active) return false;
     try {
         await setDoc(doc(db, "dutyRoster", key), { shift, updatedAt: Date.now(), updatedBy: auth.currentUser.uid });
+        return true;
     } catch (error) {
         console.error("Roster shift cloud save error:", error);
+        return false;
     }
 }
 
