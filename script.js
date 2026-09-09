@@ -200,6 +200,9 @@ async function handleAuthenticatedUser(user) {
         updateDashboard();
         renderInvoice();
         await connectCloudInventory();
+        await loadRosterCloud();
+        renderRoster();
+        renderPayroll();
         if (isPrivilegedRole(profile)) await loadUsers();
     } catch (error) {
         console.error("Profile error:", error);
@@ -356,6 +359,7 @@ function addOrUpdateRosterWorker(worker) {
     if (existing) Object.assign(existing, rosterWorker);
     else rosterWorkers.push(rosterWorker);
     localStorage.setItem("rosterWorkers", JSON.stringify(rosterWorkers));
+    saveRosterWorkerCloud(rosterWorker);
     renderWorkerOptions();
     renderRoster();
 }
@@ -1043,6 +1047,72 @@ function rosterDutyWeight(shift) {
     return shift ? 1 : 0;
 }
 
+async function loadRosterCloud() {
+    if (!auth.currentUser || !currentProfile?.active) return;
+    try {
+        const [workerSnap, shiftSnap] = await Promise.all([
+            getDocs(collection(db, "rosterWorkers")),
+            getDocs(collection(db, "dutyRoster"))
+        ]);
+
+        if (workerSnap.empty && isPrivilegedRole() && rosterWorkers.length) {
+            await Promise.all(rosterWorkers.map(worker => saveRosterWorkerCloud(worker)));
+        }
+        if (shiftSnap.empty && isPrivilegedRole() && Object.keys(dutyRoster).length) {
+            await Promise.all(Object.entries(dutyRoster).map(([key, shift]) => saveRosterShiftCloud(key, shift)));
+        }
+
+        if (!workerSnap.empty) {
+            rosterWorkers = workerSnap.docs.map(item => ({ id: item.id, ...item.data() }));
+            localStorage.setItem("rosterWorkers", JSON.stringify(rosterWorkers));
+        }
+        if (!shiftSnap.empty) {
+            dutyRoster = {};
+            shiftSnap.docs.forEach(item => { dutyRoster[item.id] = item.data().shift; });
+            localStorage.setItem("dutyRoster", JSON.stringify(dutyRoster));
+        }
+        renderWorkerOptions();
+    } catch (error) {
+        console.error("Roster cloud load error:", error);
+    }
+}
+
+async function saveRosterWorkerCloud(worker) {
+    if (!auth.currentUser || !currentProfile?.active) return;
+    try {
+        await setDoc(doc(db, "rosterWorkers", worker.id), worker);
+    } catch (error) {
+        console.error("Roster worker cloud save error:", error);
+    }
+}
+
+async function saveRosterShiftCloud(key, shift) {
+    if (!auth.currentUser || !currentProfile?.active) return;
+    try {
+        await setDoc(doc(db, "dutyRoster", key), { shift, updatedAt: Date.now(), updatedBy: auth.currentUser.uid });
+    } catch (error) {
+        console.error("Roster shift cloud save error:", error);
+    }
+}
+
+async function deleteRosterShiftCloud(key) {
+    if (!auth.currentUser || !currentProfile?.active) return;
+    try {
+        await deleteDoc(doc(db, "dutyRoster", key));
+    } catch (error) {
+        console.error("Roster shift cloud delete error:", error);
+    }
+}
+
+async function deleteRosterWorkerCloud(workerId) {
+    if (!auth.currentUser || !currentProfile?.active) return;
+    try {
+        await deleteDoc(doc(db, "rosterWorkers", workerId));
+    } catch (error) {
+        console.error("Roster worker cloud delete error:", error);
+    }
+}
+
 function renderRoster() {
     const head = document.getElementById("rosterHead");
     const table = document.getElementById("rosterTable");
@@ -1103,6 +1173,7 @@ function addRosterWorker() {
 
     rosterWorkers.push({ id: makeId(), name, role, phone, createdAt: Date.now() });
     localStorage.setItem("rosterWorkers", JSON.stringify(rosterWorkers));
+    saveRosterWorkerCloud(rosterWorkers[rosterWorkers.length - 1]);
     renderWorkerOptions();
     renderRoster();
     nameInput.value = "";
@@ -1123,7 +1194,7 @@ function closeRosterWorkerEditor() {
     if (editor) editor.hidden = true;
 }
 
-function removeRosterWorker(workerId) {
+async function removeRosterWorker(workerId) {
     if (!requireManagePermission()) return;
     const worker = rosterWorkers.find(item => item.id === workerId);
     if (!worker || !confirm(`${worker.name} को roster से remove करना है?`)) return;
@@ -1133,6 +1204,7 @@ function removeRosterWorker(workerId) {
     });
     localStorage.setItem("rosterWorkers", JSON.stringify(rosterWorkers));
     localStorage.setItem("dutyRoster", JSON.stringify(dutyRoster));
+    await deleteRosterWorkerCloud(workerId);
     renderRoster();
 }
 
@@ -1158,6 +1230,7 @@ function saveRosterShift() {
     const shift = document.getElementById("rosterShiftValue")?.value || "Morning";
     dutyRoster[rosterEditingKey] = shift;
     localStorage.setItem("dutyRoster", JSON.stringify(dutyRoster));
+    saveRosterShiftCloud(rosterEditingKey, shift);
     closeRosterShiftEditor();
     renderRoster();
     generateRosterPayroll(false);
@@ -1169,6 +1242,7 @@ function removeRosterShift() {
     if (!rosterEditingKey) return;
     delete dutyRoster[rosterEditingKey];
     localStorage.setItem("dutyRoster", JSON.stringify(dutyRoster));
+    deleteRosterShiftCloud(rosterEditingKey);
     closeRosterShiftEditor();
     renderRoster();
     generateRosterPayroll(false);

@@ -22,5 +22,15 @@ service cloud.firestore {
     match /vegetableItems/{itemId} {
       allow read, write: if isAdmin();
     }
+
+    match /rosterWorkers/{workerId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /dutyRoster/{shiftId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
   }
 }
